@@ -1,0 +1,9 @@
+{
+  "name": "magic-teams-pipeline",
+  "version": "1.0.0",
+  "description": "Magic Teams AI — Prospect Tracker",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^8.0.0"
+  }
+}

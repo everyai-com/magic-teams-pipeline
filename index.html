@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Magic Teams — Pipeline</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --text: #e8eaf6;
+      --text-muted: #8b90b0;
+      --accent: #6c63ff;
+      --accent-light: #8b85ff;
+
+      --new:       #64748b;
+      --contacted: #3b82f6;
+      --warm:      #f59e0b;
+      --proposal:  #8b5cf6;
+      --closed:    #22c55e;
+      --dead:      #ef4444;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+    .save-indicator {
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: all 0.3s;
+    }
+    .save-indicator.saving { color: var(--warm); }
+    .save-indicator.saved  { color: var(--closed); }
+
+    /* ── Alert banner ── */
+    #alert-banner {
+      display: none;
+      background: linear-gradient(135deg, #7c1c1c, #5c1a1a);
+      border-bottom: 1px solid #ef444455;
+      padding: 10px 28px;
+      font-size: 13px;
+      color: #fca5a5;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #alert-banner.visible { display: flex; }
+    .alert-item {
+      background: #ef444422;
+      border: 1px solid #ef444444;
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-weight: 500;
+    }
+
+    /* ── Main layout ── */
+    main { padding: 24px 28px; overflow-x: auto; }
+
+    .board {
+      display: flex;
+      gap: 16px;
+      min-width: max-content;
+      align-items: flex-start;
+    }
+
+    /* ── Column ── */
+    .column {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .column-header {
+      padding: 14px 16px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .column-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .column-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+    }
+    .column-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--surface2);
+      border-radius: 20px;
+      padding: 2px 8px;
+    }
+    .column-cards {
+      padding: 10px;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+    .column-cards.drag-over {
+      background: var(--surface2);
+      border-radius: 8px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+      draggable: true;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px #6c63ff22;
+    }
+    .card.dragging { opacity: 0.4; }
+    .card-name {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .card-company {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .card-next-action {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      margin-bottom: 8px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 6px;
+    }
+    .followup-badge {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+    .followup-badge.overdue {
+      background: #ef444422;
+      color: #f87171;
+      border: 1px solid #ef444444;
+    }
+    .followup-badge.today {
+      background: #f59e0b22;
+      color: #fbbf24;
+      border: 1px solid #f59e0b44;
+    }
+    .followup-badge.upcoming {
+      background: var(--surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .value-badge {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* ── Empty column placeholder ── */
+    .empty-placeholder {
+      text-align: center;
+      padding: 20px 10px;
+      color: var(--text-muted);
+      font-size: 12px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      margin: 4px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-light); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+    .btn-danger {
+      background: transparent;
+      color: #f87171;
+      border: 1px solid #ef444444;
+    }
+    .btn-danger:hover { background: #ef444422; }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 520px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-title { font-size: 16px; font-weight: 700; }
+    .modal-close {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); border-color: var(--accent); }
+    .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    /* ── Form ── */
+    .form-row { display: flex; gap: 12px; }
+    .form-row .form-group { flex: 1; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .form-input, .form-select, .form-textarea {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 9px 12px;
+      font-family: inherit;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .form-select { cursor: pointer; }
+    .form-select option { background: var(--surface2); }
+    .form-textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 20px;
+      padding: 0 28px 20px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stat-value { font-size: 22px; font-weight: 700; }
+    .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ── Loading ── */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: var(--text-muted);
+      font-size: 14px;
+      gap: 10px;
+    }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    Magic Teams — Pipeline
+  </div>
+  <div class="header-actions">
+    <span class="save-indicator" id="save-indicator">All saved</span>
+    <button class="btn btn-primary" id="add-btn">+ Add Prospect</button>
+  </div>
+</header>
+
+<!-- Alert banner (overdue follow-ups) -->
+<div id="alert-banner">
+  <span>⚠️ Follow-ups overdue:</span>
+  <span id="alert-items"></span>
+</div>
+
+<!-- Stats bar -->
+<div class="stats-bar" id="stats-bar" style="padding-top:20px;"></div>
+
+<!-- Board -->
+<main>
+  <div id="loading" class="loading">
+    <div class="spinner"></div> Loading pipeline…
+  </div>
+  <div class="board" id="board" style="display:none;"></div>
+</main>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Add Prospect</span>
+      <button class="modal-close" id="modal-close">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="field-id" />
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Name *</label>
+          <input class="form-input" id="field-name" placeholder="Full name" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Company</label>
+          <input class="form-input" id="field-company" placeholder="Company name" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-input" id="field-email" type="email" placeholder="email@example.com" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Potential Value</label>
+          <input class="form-input" id="field-value" placeholder="e.g. $5K, Enterprise" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="field-status">
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="warm">Warm</option>
+            <option value="proposal">Proposal Sent</option>
+            <option value="closed">Closed ✓</option>
+            <option value="dead">Dead</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Follow-up Date</label>
+          <input class="form-input" id="field-followup" type="date" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Next Action</label>
+        <input class="form-input" id="field-next-action" placeholder="What needs to happen next?" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Source</label>
+        <input class="form-input" id="field-source" placeholder="e.g. Midori referral, LinkedIn, Cold outreach" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-textarea" id="field-notes" placeholder="Background, context, key details…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="delete-btn" style="display:none;">Delete</button>
+      <div style="display:flex;gap:10px;margin-left:auto;">
+        <button class="btn btn-ghost" id="cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="save-btn">Save Prospect</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const API = "/api/prospects";
+const ACCESS_TOKEN = "";  // Set this to match your Netlify ACCESS_TOKEN env var
+
+const STATUSES = [
+  { id: "new",       label: "New",          color: "#64748b" },
+  { id: "contacted", label: "Contacted",     color: "#3b82f6" },
+  { id: "warm",      label: "Warm",          color: "#f59e0b" },
+  { id: "proposal",  label: "Proposal Sent", color: "#8b5cf6" },
+  { id: "closed",    label: "Closed",        color: "#22c55e" },
+  { id: "dead",      label: "Dead",          color: "#ef4444" },
+];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let prospects = [];
+let saveTimer = null;
+let dragCard = null;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function today() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function formatDate(d) {
+  if (!d) return null;
+  const dt = new Date(d + "T00:00:00");
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function daysDiff(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + "T00:00:00");
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  return Math.round((d - now) / 86400000);
+}
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function loadProspects() {
+  try {
+    const res = await fetch(API);
+    const data = await res.json();
+    prospects = data.prospects || [];
+  } catch (e) {
+    console.error("Load failed:", e);
+    prospects = [];
+  }
+}
+
+async function saveProspects() {
+  setIndicator("saving");
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (ACCESS_TOKEN) headers["Authorization"] = `Bearer ${ACCESS_TOKEN}`;
+    await fetch(API, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ prospects })
+    });
+    setIndicator("saved");
+  } catch (e) {
+    setIndicator("error");
+  }
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveProspects, 800);
+}
+
+function setIndicator(state) {
+  const el = document.getElementById("save-indicator");
+  el.className = "save-indicator " + state;
+  if (state === "saving") el.textContent = "Saving…";
+  else if (state === "saved") el.textContent = "All saved";
+  else el.textContent = "Save failed";
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  renderAlerts();
+  renderStats();
+  renderBoard();
+}
+
+function renderAlerts() {
+  const banner = document.getElementById("alert-banner");
+  const items  = document.getElementById("alert-items");
+  const t = today();
+  const overdue = prospects.filter(p =>
+    p.followUpDate && p.followUpDate < t && p.status !== "closed" && p.status !== "dead"
+  );
+  if (overdue.length === 0) {
+    banner.classList.remove("visible");
+    return;
+  }
+  banner.classList.add("visible");
+  items.innerHTML = overdue.map(p =>
+    `<span class="alert-item">${p.name}${p.company ? " · " + p.company : ""}</span>`
+  ).join(" ");
+}
+
+function renderStats() {
+  const bar = document.getElementById("stats-bar");
+  const active = prospects.filter(p => p.status !== "closed" && p.status !== "dead");
+  const warm   = prospects.filter(p => p.status === "warm" || p.status === "proposal");
+  const closed = prospects.filter(p => p.status === "closed");
+  const t = today();
+  const dueToday = prospects.filter(p =>
+    p.followUpDate && p.followUpDate <= t && p.status !== "closed" && p.status !== "dead"
+  );
+
+  bar.innerHTML = [
+    { value: prospects.length, label: "Total Prospects" },
+    { value: active.length,    label: "Active" },
+    { value: warm.length,      label: "Warm / Proposal" },
+    { value: closed.length,    label: "Closed" },
+    { value: dueToday.length,  label: "Follow-ups Due", highlight: dueToday.length > 0 },
+  ].map(s => `
+    <div class="stat">
+      <span class="stat-value" style="${s.highlight ? "color:#f59e0b" : ""}">${s.value}</span>
+      <span class="stat-label">${s.label}</span>
+    </div>
+  `).join("");
+}
+
+function renderBoard() {
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  board.style.display = "flex";
+  document.getElementById("loading").style.display = "none";
+
+  STATUSES.forEach(status => {
+    const cards = prospects.filter(p => p.status === status.id);
+    const col = document.createElement("div");
+    col.className = "column";
+    col.dataset.status = status.id;
+
+    col.innerHTML = `
+      <div class="column-header">
+        <div class="column-title">
+          <div class="column-dot" style="background:${status.color}"></div>
+          ${status.label}
+        </div>
+        <span class="column-count">${cards.length}</span>
+      </div>
+      <div class="column-cards" id="col-${status.id}"></div>
+    `;
+
+    const cardsEl = col.querySelector(".column-cards");
+
+    // Drag over
+    cardsEl.addEventListener("dragover", e => {
+      e.preventDefault();
+      cardsEl.classList.add("drag-over");
+    });
+    cardsEl.addEventListener("dragleave", () => cardsEl.classList.remove("drag-over"));
+    cardsEl.addEventListener("drop", e => {
+      e.preventDefault();
+      cardsEl.classList.remove("drag-over");
+      if (dragCard) {
+        const p = prospects.find(x => x.id === dragCard);
+        if (p) { p.status = status.id; p.updatedAt = new Date().toISOString(); }
+        render();
+        scheduleSave();
+      }
+    });
+
+    if (cards.length === 0) {
+      cardsEl.innerHTML = `<div class="empty-placeholder">Drop cards here</div>`;
+    } else {
+      cards.forEach(p => {
+        const card = buildCard(p);
+        cardsEl.appendChild(card);
+      });
+    }
+
+    board.appendChild(col);
+  });
+}
+
+function buildCard(p) {
+  const el = document.createElement("div");
+  el.className = "card";
+  el.draggable = true;
+  el.dataset.id = p.id;
+
+  el.addEventListener("dragstart", () => {
+    dragCard = p.id;
+    setTimeout(() => el.classList.add("dragging"), 0);
+  });
+  el.addEventListener("dragend", () => {
+    dragCard = null;
+    el.classList.remove("dragging");
+  });
+  el.addEventListener("click", () => openModal(p.id));
+
+  const diff = daysDiff(p.followUpDate);
+  let badgeHtml = "";
+  if (p.followUpDate) {
+    if (diff < 0) {
+      badgeHtml = `<span class="followup-badge overdue">⚠ ${Math.abs(diff)}d overdue</span>`;
+    } else if (diff === 0) {
+      badgeHtml = `<span class="followup-badge today">Today</span>`;
+    } else {
+      badgeHtml = `<span class="followup-badge upcoming">${formatDate(p.followUpDate)}</span>`;
+    }
+  }
+
+  el.innerHTML = `
+    <div class="card-name">${esc(p.name)}</div>
+    ${p.company ? `<div class="card-company">${esc(p.company)}</div>` : ""}
+    ${p.nextAction ? `<div class="card-next-action">${esc(p.nextAction)}</div>` : ""}
+    <div class="card-footer">
+      ${badgeHtml}
+      ${p.potentialValue ? `<span class="value-badge">${esc(p.potentialValue)}</span>` : ""}
+    </div>
+  `;
+  return el;
+}
+
+function esc(str) {
+  if (!str) return "";
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+function openModal(id) {
+  const p = id ? prospects.find(x => x.id === id) : null;
+  document.getElementById("modal-title").textContent = p ? "Edit Prospect" : "Add Prospect";
+  document.getElementById("field-id").value = p?.id || "";
+  document.getElementById("field-name").value = p?.name || "";
+  document.getElementById("field-company").value = p?.company || "";
+  document.getElementById("field-email").value = p?.email || "";
+  document.getElementById("field-value").value = p?.potentialValue || "";
+  document.getElementById("field-status").value = p?.status || "new";
+  document.getElementById("field-followup").value = p?.followUpDate || today();
+  document.getElementById("field-next-action").value = p?.nextAction || "";
+  document.getElementById("field-source").value = p?.source || "";
+  document.getElementById("field-notes").value = p?.notes || "";
+  document.getElementById("delete-btn").style.display = p ? "inline-flex" : "none";
+  document.getElementById("modal-backdrop").classList.add("open");
+  setTimeout(() => document.getElementById("field-name").focus(), 50);
+}
+
+function closeModal() {
+  document.getElementById("modal-backdrop").classList.remove("open");
+}
+
+function saveModal() {
+  const name = document.getElementById("field-name").value.trim();
+  if (!name) { document.getElementById("field-name").focus(); return; }
+
+  const id = document.getElementById("field-id").value;
+  const now = new Date().toISOString();
+
+  if (id) {
+    const idx = prospects.findIndex(x => x.id === id);
+    if (idx !== -1) {
+      prospects[idx] = {
+        ...prospects[idx],
+        name,
+        company: document.getElementById("field-company").value.trim(),
+        email: document.getElementById("field-email").value.trim(),
+        potentialValue: document.getElementById("field-value").value.trim(),
+        status: document.getElementById("field-status").value,
+        followUpDate: document.getElementById("field-followup").value,
+        nextAction: document.getElementById("field-next-action").value.trim(),
+        source: document.getElementById("field-source").value.trim(),
+        notes: document.getElementById("field-notes").value.trim(),
+        updatedAt: now,
+      };
+    }
+  } else {
+    prospects.push({
+      id: uid(),
+      name,
+      company: document.getElementById("field-company").value.trim(),
+      email: document.getElementById("field-email").value.trim(),
+      potentialValue: document.getElementById("field-value").value.trim(),
+      status: document.getElementById("field-status").value,
+      followUpDate: document.getElementById("field-followup").value,
+      nextAction: document.getElementById("field-next-action").value.trim(),
+      source: document.getElementById("field-source").value.trim(),
+      notes: document.getElementById("field-notes").value.trim(),
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  closeModal();
+  render();
+  scheduleSave();
+}
+
+function deleteProspect() {
+  const id = document.getElementById("field-id").value;
+  if (!id) return;
+  if (!confirm("Delete this prospect?")) return;
+  prospects = prospects.filter(x => x.id !== id);
+  closeModal();
+  render();
+  scheduleSave();
+}
+
+// ── Event Listeners ───────────────────────────────────────────────────────────
+document.getElementById("add-btn").addEventListener("click", () => openModal(null));
+document.getElementById("modal-close").addEventListener("click", closeModal);
+document.getElementById("cancel-btn").addEventListener("click", closeModal);
+document.getElementById("save-btn").addEventListener("click", saveModal);
+document.getElementById("delete-btn").addEventListener("click", deleteProspect);
+document.getElementById("modal-backdrop").addEventListener("click", e => {
+  if (e.target === document.getElementById("modal-backdrop")) closeModal();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeModal();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  await loadProspects();
+  render();
+})();
+</script>
+</body>
+</html>
